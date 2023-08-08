@@ -1,3 +1,4 @@
+"use client";
 export const usePermissions = async () => {
   let permissions = {
     audio: false,
