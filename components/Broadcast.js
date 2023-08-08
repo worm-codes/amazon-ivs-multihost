@@ -32,17 +32,26 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     ingestEndpoint: ingestEndpoint,
   });
   const streamConfig = IVSBroadcastClient.BASIC_LANDSCAPE;
-  const initializeStream = async () => {
-    await usePermissions();
 
+  const refreshVideoPositions = () => {
+    participants.forEach((participant, index) =>
+      client.updateVideoDeviceComposition(`video-${participant.id}`, {
+        index: 0,
+        width: streamConfig.maxResolution.width / participants.length,
+        x: index * (streamConfig.maxResolution.width / participants.length),
+      })
+    );
+  };
+  const initializeStream = async () => {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((d) => d.kind === "videoinput");
     const audioDevices = devices.filter((d) => d.kind === "audioinput");
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: audioDevices[0].deviceId },
-      video: { deviceId: videoDevices[0].deviceId },
+      audio: { deviceId: audioDevices[0]?.deviceId },
+      video: { deviceId: videoDevices[0]?.deviceId },
     });
+
     const audioTrack = new LocalStageStream(stream.getAudioTracks()[0]);
     const videoTrack = new LocalStageStream(stream.getVideoTracks()[0]);
 
@@ -57,9 +66,10 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
         return SubscribeType.AUDIO_VIDEO;
       },
     });
+
     client.enableVideo();
     client.enableAudio();
-    // Attach the canvas preview
+
     if (canvasRef.current) {
       client.attachPreview(canvasRef.current);
     }
@@ -67,16 +77,6 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     if (streamKey) {
       client.startBroadcast(streamKey);
     }
-
-    const refreshVideoPositions = () => {
-      participants.forEach((participant, index) =>
-        client.updateVideoDeviceComposition(`video-${participant.id}`, {
-          index: 0,
-          width: streamConfig.maxResolution.width / participants.length,
-          x: index * (streamConfig.maxResolution.width / participants.length),
-        })
-      );
-    };
 
     stage.on(
       StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
@@ -176,7 +176,7 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
         }
       }
     };
-  }, [canvasRef, videoRefs, participants, client]);
+  }, [canvasRef, videoRefs, client]);
 
   const addToVideoRefs = (el) => {
     if (el && !videoRefs.current.includes(el)) {
