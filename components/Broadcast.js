@@ -8,6 +8,18 @@ import IVSBroadcastClient, {
   SubscribeType,
 } from "amazon-ivs-web-broadcast";
 
+const Broadcast = React.memo(({ ingestEndpoint, stageToken, streamKey }) => {
+  return (
+    <div>
+      <VideoBroadcast
+        ingestEndpoint={ingestEndpoint}
+        stageToken={stageToken}
+        streamKey={streamKey}
+      />
+    </div>
+  );
+});
+
 const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
   const canvasRef = useRef();
   const videoRefs = useRef([]);
@@ -47,7 +59,9 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     client.enableVideo();
     client.enableAudio();
     // Attach the canvas preview
-    client.attachPreview(canvasRef.current);
+    if (canvasRef.current) {
+      client.attachPreview(canvasRef.current);
+    }
 
     if (streamKey) {
       client.startBroadcast(streamKey);
@@ -84,7 +98,7 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
           return v.dataset.participantId === participant.id;
         });
         if (!video) return;
-
+        console.log(video.srcObject, "video");
         // Attach the participant's streams
         const streamsToDisplay = participant.isLocal
           ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
@@ -156,7 +170,9 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     return () => {
       if (client) {
         client.stopBroadcast();
-        client.detachPreview();
+        if (canvasRef.current) {
+          client.detachPreview();
+        }
       }
     };
   }, [canvasRef, videoRefs, participants, client]);
@@ -189,4 +205,4 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
   );
 };
 
-export default VideoBroadcast;
+export default Broadcast;
