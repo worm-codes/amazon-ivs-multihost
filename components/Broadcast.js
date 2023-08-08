@@ -140,8 +140,8 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
           setParticipants((prevParticipants) =>
             prevParticipants.filter((exist) => exist.id !== participant.id)
           );
-          client.removeVideoInputDevice(`video-${participant.id}`);
-          client.removeAudioInputDevice(`audio-${participant.id}`);
+          client?.removeVideoInputDevice(`video-${participant.id}`);
+          client?.removeAudioInputDevice(`audio-${participant.id}`);
           refreshVideoPositions();
         }
       }
@@ -172,7 +172,7 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
         client.detachPreview();
       }
     };
-  }, [ingestEndpoint, stageToken, streamKey, participants]);
+  }, []);
 
   const addToVideoRefs = (el) => {
     if (el && !videoRefs.current.includes(el)) {
