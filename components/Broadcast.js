@@ -172,7 +172,7 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
         client.detachPreview();
       }
     };
-  }, []);
+  }, [canvasRef, videoRefs, participants]);
 
   const addToVideoRefs = (el) => {
     if (el && !videoRefs.current.includes(el)) {
