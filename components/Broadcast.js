@@ -46,7 +46,6 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     });
     client.enableVideo();
     client.enableAudio();
-    console.log(canvasRef.current);
     // Attach the canvas preview
     client.attachPreview(canvasRef.current);
 
@@ -69,8 +68,6 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
       async (participant, streams) => {
         console.log("STAGE_PARTICIPANT_STREAMS_ADDED", participant);
 
-        // Check if the participant already exists
-        console.log(participants, participants.includes(participant));
         if (
           !participants.some(
             (existingParticipant) => existingParticipant.id === participant.id
@@ -81,9 +78,9 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
 
         // Wait for video elements to render (using a state update)
         // await new Promise((resolve) => setTimeout(resolve));
-        console.log(videoRefs.current);
+        console.log(videoRefs.current, "video array");
         const video = videoRefs.current.find((v) => {
-          console.log(v.dataset);
+          console.log(v.dataset, "video itself");
           return v.dataset.participantId === participant.id;
         });
         if (!video) return;
@@ -147,39 +144,28 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
       }
     );
 
-    stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, async (participant) => {
-      console.log("STAGE_PARTICIPANT_JOINED", participant);
-    });
+    stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, async (participant) => {});
 
-    stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, async (_participant) => {
-      console.log("STAGE_PARTICIPANT_LEFT", participants);
-    });
+    stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, async (_participant) => {});
 
     await stage.join();
   };
   useEffect(() => {
     initializeStream();
 
-    return (stage) => {
-      if (stage) {
-        console.log(stage, "stage");
-        stage.leave();
-      }
-
+    return () => {
       if (client) {
-        console.log(client, "client");
         client.stopBroadcast();
         client.detachPreview();
       }
     };
-  }, [canvasRef, videoRefs, participants]);
+  }, [canvasRef, videoRefs, participants, client]);
 
   const addToVideoRefs = (el) => {
     if (el && !videoRefs.current.includes(el)) {
       videoRefs.current.push(el);
     }
   };
-  console.log(participants);
 
   return (
     <div>
@@ -189,7 +175,6 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
       ></canvas>
       {participants.map((participant) => (
         <video
-          style={{ display: "none" }}
           key={participant.id}
           data-participant-id={participant.id}
           ref={addToVideoRefs}
