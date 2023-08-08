@@ -169,14 +169,14 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
     initializeStream();
 
     return () => {
-      if (client) {
-        client.stopBroadcast();
-        if (canvasRef.current) {
-          client.detachPreview();
-        }
-      }
+      // if (client) {
+      //   // client.stopBroadcast();
+      //   if (canvasRef.current) {
+      //     client.detachPreview();
+      //   }
+      // }
     };
-  }, [canvasRef, videoRefs, client]);
+  }, [canvasRef, videoRefs, client, participants]);
 
   const addToVideoRefs = (el) => {
     if (el && !videoRefs.current.includes(el)) {
