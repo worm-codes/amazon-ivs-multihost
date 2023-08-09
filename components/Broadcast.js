@@ -1,6 +1,4 @@
-"use client";
-import React, { useEffect, useRef, useState } from "react";
-import { usePermissions } from "@/hooks/usePermission";
+import React, { useRef, useEffect, useState } from "react";
 import IVSBroadcastClient, {
   LocalStageStream,
   Stage,
@@ -8,50 +6,27 @@ import IVSBroadcastClient, {
   StreamType,
   SubscribeType,
 } from "amazon-ivs-web-broadcast";
+import { usePermissions } from "@/hooks/usePermission";
 
-const Broadcast = React.memo(({ ingestEndpoint, stageToken, streamKey }) => {
-  return (
-    <div>
-      <VideoBroadcast
-        ingestEndpoint={ingestEndpoint}
-        stageToken={stageToken}
-        streamKey={streamKey}
-      />
-    </div>
-  );
-});
-
-const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
-  const canvasRef = useRef();
-  const videoRefs = useRef([]);
+function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
+  const canvasRef = useRef(null);
+  const videosRef = useRef([]);
   const [participants, setParticipants] = useState([]);
-  const client = IVSBroadcastClient.create({
-    // Enter the desired stream configuration
-    streamConfig: IVSBroadcastClient.BASIC_LANDSCAPE,
-    // Enter the ingest endpoint from the AWS console or CreateChannel API
-    ingestEndpoint: ingestEndpoint,
-  });
-  const streamConfig = IVSBroadcastClient.BASIC_LANDSCAPE;
 
-  const refreshVideoPositions = () => {
-    participants.forEach((participant, index) =>
-      client.updateVideoDeviceComposition(`video-${participant.id}`, {
-        index: 0,
-        width: streamConfig.maxResolution.width / participants.length,
-        x: index * (streamConfig.maxResolution.width / participants.length),
-      })
-    );
-  };
-  const initializeStream = async () => {
+  useEffect(async () => {
+    const client = IVSBroadcastClient.create({
+      streamConfig: IVSBroadcastClient.BASIC_LANDSCAPE,
+      ingestEndpoint: ingestEndpoint,
+    });
+    await usePermissions();
+
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((d) => d.kind === "videoinput");
     const audioDevices = devices.filter((d) => d.kind === "audioinput");
-
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: audioDevices[0]?.deviceId },
-      video: { deviceId: videoDevices[0]?.deviceId },
+      audio: { deviceId: audioDevices[0].deviceId },
+      video: { deviceId: videoDevices[0].deviceId },
     });
-
     const audioTrack = new LocalStageStream(stream.getAudioTracks()[0]);
     const videoTrack = new LocalStageStream(stream.getVideoTracks()[0]);
 
@@ -69,144 +44,146 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
 
     client.enableVideo();
     client.enableAudio();
-
-    if (canvasRef.current) {
-      client.attachPreview(canvasRef.current);
-    }
-
+    console.log(canvasRef.current);
+    client.attachPreview(canvasRef.current);
     if (streamKey) {
       client.startBroadcast(streamKey);
     }
 
+    const refreshVideoPositions = () => {
+      participants.forEach((participant, index) => {
+        client.updateVideoDeviceComposition(`video-${participant.id}`, {
+          index: 0,
+          width: streamConfig.maxResolution.width / participants.length,
+          x: index * (streamConfig.maxResolution.width / participants.length),
+        });
+      });
+    };
+
+    const handleParticipantStreamsAdded = async (participant, streams) => {
+      console.log("STAGE_PARTICIPANT_STREAMS_ADDED", participant);
+
+      setParticipants((prevParticipants) => [
+        ...new Set([...prevParticipants, participant]),
+      ]);
+
+      await new Promise((resolve) => setTimeout(resolve, 0)); // Simulating nextTick behavior
+
+      const video = videosRef.current.find(
+        (v) => v.dataset.participantId === participant.id
+      );
+      console.log(video);
+      if (!video) return;
+
+      const streamsToDisplay = participant.isLocal
+        ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
+        : streams;
+      video.srcObject = new MediaStream(
+        streamsToDisplay.map((stream) => stream.mediaStreamTrack)
+      );
+
+      await video.play();
+
+      await Promise.all([
+        ...streams
+          .filter((stream) => stream.streamType === StreamType.VIDEO)
+          .map((stream) =>
+            client.addVideoInputDevice(
+              new MediaStream([stream.mediaStreamTrack]),
+              `video-${participant.id}`,
+              {
+                index: 0,
+                width: streamConfig.maxResolution.width / participants.length,
+                x:
+                  (participants.length - 1) *
+                  (streamConfig.maxResolution.width / participants.length),
+              }
+            )
+          ),
+        ...streams
+          .filter((stream) => stream.streamType === StreamType.AUDIO)
+          .map((stream) =>
+            client.addAudioInputDevice(
+              new MediaStream([stream.mediaStreamTrack]),
+              `audio-${participant.id}`
+            )
+          ),
+      ]);
+
+      refreshVideoPositions();
+    };
+
+    const handleParticipantStreamsRemoved = async (participant) => {
+      console.log("STAGE_PARTICIPANT_STREAMS_REMOVED", participant);
+
+      setParticipants((prevParticipants) =>
+        prevParticipants.filter((exist) => exist.id !== participant.id)
+      );
+
+      client.removeVideoInputDevice(`video-${participant.id}`);
+      client.removeAudioInputDevice(`audio-${participant.id}`);
+
+      refreshVideoPositions();
+    };
+
+    const handleParticipantJoined = (participant) => {
+      console.log("STAGE_PARTICIPANT_JOINED", participant);
+    };
+
+    const handleParticipantLeft = () => {
+      console.log("STAGE_PARTICIPANT_LEFT", participants);
+    };
+
     stage.on(
       StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
-      async (participant, streams) => {
-        console.log("STAGE_PARTICIPANT_STREAMS_ADDED", participant);
-
-        if (
-          !participants.some(
-            (existingParticipant) => existingParticipant.id === participant.id
-          )
-        ) {
-          setParticipants([...participants, participant]);
-        }
-
-        // // Wait for video elements to render (using a state update)
-        // // await new Promise((resolve) => setTimeout(resolve));
-        // console.log(videoRefs.current, "video array");
-        // const video = videoRefs.current.find((v) => {
-        //   console.log(v.dataset, "video itself");
-        //   return v.dataset.participantId === participant.id;
-        // });
-        // if (!video) return;
-        // console.log(video.srcObject, "video");
-        // // Attach the participant's streams
-        // const streamsToDisplay = participant.isLocal
-        //   ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
-        //   : streams;
-        // video.srcObject = new MediaStream(
-        //   streamsToDisplay.map((stream) => stream.mediaStreamTrack)
-        // );
-
-        // Require to call before addVideoInputDevice
-        // await video.play();
-        await Promise.all([
-          ...streams
-            .filter((stream) => stream.streamType === StreamType.VIDEO)
-            .map((stream) =>
-              client.addVideoInputDevice(
-                new MediaStream([stream.mediaStreamTrack]),
-                `video-${participant.id}`,
-                {
-                  index: 0,
-                  width: streamConfig.maxResolution.width / participants.length,
-                  x:
-                    (participants.length - 1) *
-                    (streamConfig.maxResolution.width / participants.length),
-                }
-              )
-            ),
-          ...streams
-            .filter((stream) => stream.streamType === StreamType.AUDIO)
-            .map((stream) =>
-              client.addAudioInputDevice(
-                new MediaStream([stream.mediaStreamTrack]),
-                `audio-${participant.id}`
-              )
-            ),
-        ]);
-        refreshVideoPositions();
-      }
+      handleParticipantStreamsAdded
     );
-
     stage.on(
       StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED,
-      async (participant) => {
-        console.log("STAGE_PARTICIPANT_STREAMS_REMOVED", participant);
-        if (
-          participants.some(
-            (existingParticipant) => existingParticipant.id === participant.id
-          )
-        ) {
-          // Remove participant from broadcast
-          setParticipants((prevParticipants) =>
-            prevParticipants.filter((exist) => exist.id !== participant.id)
-          );
-          client?.removeVideoInputDevice(`video-${participant.id}`);
-          client?.removeAudioInputDevice(`audio-${participant.id}`);
-          refreshVideoPositions();
-        }
-      }
+      handleParticipantStreamsRemoved
     );
-
-    stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, async (participant) => {});
-
-    stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, async (_participant) => {});
+    stage.on(StageEvents.STAGE_PARTICIPANT_JOINED, handleParticipantJoined);
+    stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, handleParticipantLeft);
 
     await stage.join();
-  };
-  console.log("useEffect");
-
-  initializeStream();
-  useEffect(() => {
-    return async (stage) => {
-      console.log(stage, "stage");
-      await stage?.removeAllListeners();
-      if (client) {
-        client.stopBroadcast();
-        if (canvasRef.current) {
-          client.detachPreview();
-        }
-      }
+    return () => {
+      stage.leave();
+      stage.off(
+        StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
+        handleParticipantStreamsAdded
+      );
+      stage.off(
+        StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED,
+        handleParticipantStreamsRemoved
+      );
+      stage.off(StageEvents.STAGE_PARTICIPANT_JOINED, handleParticipantJoined);
+      stage.off(StageEvents.STAGE_PARTICIPANT_LEFT, handleParticipantLeft);
     };
   }, []);
 
-  const addToVideoRefs = (el) => {
-    if (el && !videoRefs.current.includes(el)) {
-      videoRefs.current.push(el);
-    }
-  };
-  console.log(participants, "participants");
-  return participants?.length > 0 ? (
+  return (
     <div>
       <canvas
         ref={canvasRef}
         style={{ width: "100%" }}
       ></canvas>
-      {/* {participants.map((participant) => (
+      {participants.map((participant) => (
         <video
           key={participant.id}
           data-participant-id={participant.id}
-          ref={addToVideoRefs}
-          hidden
+          ref={(el) => {
+            if (el) {
+              videosRef.current.push(el);
+            }
+          }}
           playsInline
           autoPlay
           muted
           controls
         ></video>
-      ))} */}
+      ))}
     </div>
-  ) : null;
-};
+  );
+}
 
 export default Broadcast;
