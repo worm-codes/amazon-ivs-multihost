@@ -12,7 +12,7 @@ export default function Home() {
     e.preventDefault();
     setNowPlaying(true);
   };
-  console.log(nowPlaying);
+
   return (
     <main>
       {nowPlaying && (

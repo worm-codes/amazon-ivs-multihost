@@ -91,25 +91,25 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
           setParticipants([...participants, participant]);
         }
 
-        // Wait for video elements to render (using a state update)
-        // await new Promise((resolve) => setTimeout(resolve));
-        console.log(videoRefs.current, "video array");
-        const video = videoRefs.current.find((v) => {
-          console.log(v.dataset, "video itself");
-          return v.dataset.participantId === participant.id;
-        });
-        if (!video) return;
-        console.log(video.srcObject, "video");
-        // Attach the participant's streams
-        const streamsToDisplay = participant.isLocal
-          ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
-          : streams;
-        video.srcObject = new MediaStream(
-          streamsToDisplay.map((stream) => stream.mediaStreamTrack)
-        );
+        // // Wait for video elements to render (using a state update)
+        // // await new Promise((resolve) => setTimeout(resolve));
+        // console.log(videoRefs.current, "video array");
+        // const video = videoRefs.current.find((v) => {
+        //   console.log(v.dataset, "video itself");
+        //   return v.dataset.participantId === participant.id;
+        // });
+        // if (!video) return;
+        // console.log(video.srcObject, "video");
+        // // Attach the participant's streams
+        // const streamsToDisplay = participant.isLocal
+        //   ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
+        //   : streams;
+        // video.srcObject = new MediaStream(
+        //   streamsToDisplay.map((stream) => stream.mediaStreamTrack)
+        // );
 
         // Require to call before addVideoInputDevice
-        await video.play();
+        // await video.play();
         await Promise.all([
           ...streams
             .filter((stream) => stream.streamType === StreamType.VIDEO)
@@ -165,12 +165,13 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
 
     await stage.join();
   };
-  useEffect(() => {
-    console.log("useEffect");
-    initializeStream();
+  console.log("useEffect");
 
-    return (stage) => {
-      stage?.leave();
+  initializeStream();
+  useEffect(() => {
+    return async (stage) => {
+      console.log(stage, "stage");
+      await stage?.removeAllListeners();
       if (client) {
         client.stopBroadcast();
         if (canvasRef.current) {
@@ -185,14 +186,14 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
       videoRefs.current.push(el);
     }
   };
-
-  return (
+  console.log(participants, "participants");
+  return participants?.length > 0 ? (
     <div>
       <canvas
         ref={canvasRef}
         style={{ width: "100%" }}
       ></canvas>
-      {participants.map((participant) => (
+      {/* {participants.map((participant) => (
         <video
           key={participant.id}
           data-participant-id={participant.id}
@@ -203,9 +204,9 @@ const VideoBroadcast = ({ ingestEndpoint, stageToken, streamKey }) => {
           muted
           controls
         ></video>
-      ))}
+      ))} */}
     </div>
-  );
+  ) : null;
 };
 
 export default Broadcast;
