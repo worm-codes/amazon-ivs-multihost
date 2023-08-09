@@ -12,12 +12,99 @@ function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
   const canvasRef = useRef(null);
   const videosRef = useRef([]);
   const [participants, setParticipants] = useState([]);
+  const stageRef = useRef(null);
 
-  useEffect(async () => {
-    const client = IVSBroadcastClient.create({
-      streamConfig: IVSBroadcastClient.BASIC_LANDSCAPE,
-      ingestEndpoint: ingestEndpoint,
+  const client = IVSBroadcastClient.create({
+    streamConfig: IVSBroadcastClient.BASIC_LANDSCAPE,
+    ingestEndpoint: ingestEndpoint,
+  });
+  const streamConfig = IVSBroadcastClient.BASIC_LANDSCAPE;
+
+  const refreshVideoPositions = () => {
+    participants.forEach((participant, index) => {
+      client.updateVideoDeviceComposition(`video-${participant.id}`, {
+        index: 0,
+        width: streamConfig.maxResolution.width / participants.length,
+        x: index * (streamConfig.maxResolution.width / participants.length),
+      });
     });
+  };
+
+  const handleParticipantStreamsAdded = async (participant, streams) => {
+    console.log("STAGE_PARTICIPANT_STREAMS_ADDED", participant);
+
+    setParticipants((prevParticipants) => [
+      ...new Set([...prevParticipants, participant]),
+    ]);
+
+    await new Promise((resolve) => requestAnimationFrame(resolve)); // Simulating nextTick behavior
+    console.log(videosRef.current, "videoref");
+    const video = videosRef.current.find(
+      (v) => v.dataset.participantId === participant.id
+    );
+    console.log(video, "video");
+    if (!video) return;
+
+    const streamsToDisplay = participant.isLocal
+      ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
+      : streams;
+    console.log(streamsToDisplay, "stream");
+    video.srcObject = new MediaStream(
+      streamsToDisplay.map((stream) => stream.mediaStreamTrack)
+    );
+
+    await video.play();
+
+    await Promise.all([
+      ...streams
+        .filter((stream) => stream.streamType === StreamType.VIDEO)
+        .map((stream) =>
+          client.addVideoInputDevice(
+            new MediaStream([stream.mediaStreamTrack]),
+            `video-${participant.id}`,
+            {
+              index: 0,
+              width: streamConfig.maxResolution.width / participants.length,
+              x:
+                (participants.length - 1) *
+                (streamConfig.maxResolution.width / participants.length),
+            }
+          )
+        ),
+      ...streams
+        .filter((stream) => stream.streamType === StreamType.AUDIO)
+        .map((stream) =>
+          client.addAudioInputDevice(
+            new MediaStream([stream.mediaStreamTrack]),
+            `audio-${participant.id}`
+          )
+        ),
+    ]);
+
+    refreshVideoPositions();
+  };
+
+  const handleParticipantStreamsRemoved = async (participant) => {
+    console.log("STAGE_PARTICIPANT_STREAMS_REMOVED", participant);
+
+    setParticipants((prevParticipants) =>
+      prevParticipants.filter((exist) => exist.id !== participant.id)
+    );
+
+    client.removeVideoInputDevice(`video-${participant.id}`);
+    client.removeAudioInputDevice(`audio-${participant.id}`);
+
+    refreshVideoPositions();
+  };
+
+  const handleParticipantJoined = (participant) => {
+    console.log("STAGE_PARTICIPANT_JOINED", participant);
+  };
+
+  const handleParticipantLeft = () => {
+    console.log("STAGE_PARTICIPANT_LEFT", participants);
+  };
+  const initialize = async () => {
     await usePermissions();
 
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -41,98 +128,15 @@ function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
         return SubscribeType.AUDIO_VIDEO;
       },
     });
+    stageRef.current = stage;
 
-    client.enableVideo();
-    client.enableAudio();
+    client?.enableVideo();
+    client?.enableAudio();
     console.log(canvasRef.current);
-    client.attachPreview(canvasRef.current);
+    client?.attachPreview(canvasRef?.current);
     if (streamKey) {
-      client.startBroadcast(streamKey);
+      client?.startBroadcast(streamKey);
     }
-
-    const refreshVideoPositions = () => {
-      participants.forEach((participant, index) => {
-        client.updateVideoDeviceComposition(`video-${participant.id}`, {
-          index: 0,
-          width: streamConfig.maxResolution.width / participants.length,
-          x: index * (streamConfig.maxResolution.width / participants.length),
-        });
-      });
-    };
-
-    const handleParticipantStreamsAdded = async (participant, streams) => {
-      console.log("STAGE_PARTICIPANT_STREAMS_ADDED", participant);
-
-      setParticipants((prevParticipants) => [
-        ...new Set([...prevParticipants, participant]),
-      ]);
-
-      await new Promise((resolve) => setTimeout(resolve, 0)); // Simulating nextTick behavior
-
-      const video = videosRef.current.find(
-        (v) => v.dataset.participantId === participant.id
-      );
-      console.log(video);
-      if (!video) return;
-
-      const streamsToDisplay = participant.isLocal
-        ? streams.filter((stream) => stream.streamType === StreamType.VIDEO)
-        : streams;
-      video.srcObject = new MediaStream(
-        streamsToDisplay.map((stream) => stream.mediaStreamTrack)
-      );
-
-      await video.play();
-
-      await Promise.all([
-        ...streams
-          .filter((stream) => stream.streamType === StreamType.VIDEO)
-          .map((stream) =>
-            client.addVideoInputDevice(
-              new MediaStream([stream.mediaStreamTrack]),
-              `video-${participant.id}`,
-              {
-                index: 0,
-                width: streamConfig.maxResolution.width / participants.length,
-                x:
-                  (participants.length - 1) *
-                  (streamConfig.maxResolution.width / participants.length),
-              }
-            )
-          ),
-        ...streams
-          .filter((stream) => stream.streamType === StreamType.AUDIO)
-          .map((stream) =>
-            client.addAudioInputDevice(
-              new MediaStream([stream.mediaStreamTrack]),
-              `audio-${participant.id}`
-            )
-          ),
-      ]);
-
-      refreshVideoPositions();
-    };
-
-    const handleParticipantStreamsRemoved = async (participant) => {
-      console.log("STAGE_PARTICIPANT_STREAMS_REMOVED", participant);
-
-      setParticipants((prevParticipants) =>
-        prevParticipants.filter((exist) => exist.id !== participant.id)
-      );
-
-      client.removeVideoInputDevice(`video-${participant.id}`);
-      client.removeAudioInputDevice(`audio-${participant.id}`);
-
-      refreshVideoPositions();
-    };
-
-    const handleParticipantJoined = (participant) => {
-      console.log("STAGE_PARTICIPANT_JOINED", participant);
-    };
-
-    const handleParticipantLeft = () => {
-      console.log("STAGE_PARTICIPANT_LEFT", participants);
-    };
 
     stage.on(
       StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
@@ -146,20 +150,10 @@ function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
     stage.on(StageEvents.STAGE_PARTICIPANT_LEFT, handleParticipantLeft);
 
     await stage.join();
-    return () => {
-      stage.leave();
-      stage.off(
-        StageEvents.STAGE_PARTICIPANT_STREAMS_ADDED,
-        handleParticipantStreamsAdded
-      );
-      stage.off(
-        StageEvents.STAGE_PARTICIPANT_STREAMS_REMOVED,
-        handleParticipantStreamsRemoved
-      );
-      stage.off(StageEvents.STAGE_PARTICIPANT_JOINED, handleParticipantJoined);
-      stage.off(StageEvents.STAGE_PARTICIPANT_LEFT, handleParticipantLeft);
-    };
-  }, []);
+  };
+  if (stageRef.current === null) initialize();
+
+  console.log(participants);
 
   return (
     <div>
@@ -167,7 +161,7 @@ function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
         ref={canvasRef}
         style={{ width: "100%" }}
       ></canvas>
-      {participants.map((participant) => (
+      {participants?.map((participant) => (
         <video
           key={participant.id}
           data-participant-id={participant.id}
@@ -178,6 +172,7 @@ function Broadcast({ ingestEndpoint, stageToken, streamKey }) {
           }}
           playsInline
           autoPlay
+          hidden
           muted
           controls
         ></video>
